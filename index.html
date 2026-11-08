@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#1a3c4e">
+  <meta name="description" content="Shared expense ledger for a Japan trip. Stays on this phone.">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Trip Split">
+  <title>Japan Trip</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+  <div class="shell">
+    <div class="mast-wrap">
+      <header class="mast">
+        <div class="mast-pattern" aria-hidden="true"></div>
+        <div class="mast-inner">
+          <div class="mast-copy">
+            <p class="eyebrow"><span id="currency-label">JPY</span> · <span class="jp" lang="ja">旅の支出</span></p>
+            <h1 id="trip-title">Japan Trip</h1>
+          </div>
+          <div class="hanko" aria-hidden="true" lang="ja">旅</div>
+        </div>
+      </header>
+      <a class="who-bar" id="who-button" href="#/who" hidden>
+        <span>
+          <span class="who-kicker">Adding as <span class="jp" lang="ja">記録者</span></span>
+          <strong id="who-label">Choose</strong>
+        </span>
+        <span class="who-change">Switch</span>
+      </a>
+    </div>
+
+    <div id="banner" class="banner" hidden role="status"></div>
+
+    <main id="main">
+      <noscript>
+        <p class="noscript">Turn on JavaScript to use the trip ledger. It still stays on this phone — nothing is sent to a server.</p>
+      </noscript>
+
+      <section id="view-who" hidden>
+        <h2 id="who-title">Who are you?</h2>
+        <p class="lede"><span class="jp" lang="ja" id="who-ja">どなたですか</span></p>
+        <p class="lede" id="who-lede">Pick your name. This phone remembers it next time.</p>
+        <div id="who-grid" class="who-grid"></div>
+      </section>
+
+      <section id="view-expenses" hidden>
+        <a class="btn primary" href="#/new"><span>Add expense</span><span class="jp" lang="ja">支出を追加</span></a>
+        <p id="expense-summary" class="summary"></p>
+        <div id="expense-list"></div>
+        <p class="sync-note">Each phone keeps its own copy. Nothing syncs until someone exports a file in Settings and someone else imports it.</p>
+      </section>
+
+      <section id="view-detail" hidden>
+        <a class="back-link" href="#/expenses">All expenses</a>
+        <div id="detail-root"></div>
+      </section>
+
+      <section id="view-editor" hidden>
+        <div class="editor-head">
+          <a class="back-link" id="editor-back" href="#/expenses">Back</a>
+          <h2 id="editor-heading"><span id="editor-heading-text">New expense</span> <span class="jp" lang="ja">支出</span></h2>
+        </div>
+        <p id="editor-missing" class="lede" hidden>That expense isn’t on this phone.</p>
+        <form id="expense-form" novalidate>
+          <label class="field">
+            <span class="label-row">Description <span class="jp" lang="ja">内容</span></span>
+            <input id="field-description" type="text" maxlength="200" autocomplete="off" autocapitalize="sentences" placeholder="Ramen in Dotonbori" required>
+          </label>
+
+          <label class="field">
+            <span class="label-row">Amount <span class="jp" lang="ja">金額</span></span>
+            <div class="amount-box">
+              <span id="amount-symbol" aria-hidden="true">¥</span>
+              <input id="field-amount" type="text" inputmode="numeric" autocomplete="off" placeholder="0" maxlength="14" aria-label="Amount">
+            </div>
+            <p id="amount-hint" class="hint">Whole numbers.</p>
+          </label>
+
+          <fieldset class="field">
+            <legend class="label-row">Category <span class="jp" lang="ja">分類</span></legend>
+            <div class="chips">
+              <label class="chip"><input type="radio" name="category" value="Food" checked><span class="stack">Food <span class="jp" lang="ja">食事</span></span></label>
+              <label class="chip"><input type="radio" name="category" value="Transport"><span class="stack">Transport <span class="jp" lang="ja">交通</span></span></label>
+              <label class="chip"><input type="radio" name="category" value="Accommodation"><span class="stack">Accommodation <span class="jp" lang="ja">宿泊</span></span></label>
+              <label class="chip"><input type="radio" name="category" value="Activities/Tickets"><span class="stack">Activities/Tickets <span class="jp" lang="ja">観光</span></span></label>
+              <label class="chip"><input type="radio" name="category" value="Shopping"><span class="stack">Shopping <span class="jp" lang="ja">買物</span></span></label>
+              <label class="chip"><input type="radio" name="category" value="Other"><span class="stack">Other <span class="jp" lang="ja">その他</span></span></label>
+            </div>
+          </fieldset>
+
+          <label class="field">
+            <span class="label-row">Date <span class="jp" lang="ja">日付</span></span>
+            <input id="field-date" type="date" required>
+          </label>
+
+          <fieldset class="field">
+            <legend class="label-row">Who paid <span class="jp" lang="ja">支払</span></legend>
+            <div id="payer-chips" class="chips"></div>
+          </fieldset>
+
+          <fieldset class="field">
+            <legend class="label-row">Who shares it <span class="jp" lang="ja">割り勘</span></legend>
+            <div class="chips" style="margin-bottom: 8px">
+              <label class="chip"><input type="radio" name="split-mode" value="equal" checked><span class="stack">Equal <span class="jp" lang="ja">均等</span></span></label>
+              <label class="chip"><input type="radio" name="split-mode" value="custom"><span class="stack">Custom ratios <span class="jp" lang="ja">割合</span></span></label>
+            </div>
+            <div class="split-actions">
+              <button type="button" class="btn ghost" data-action="select-all">Everyone</button>
+              <button type="button" class="btn ghost" data-action="select-none">None</button>
+            </div>
+            <div id="person-rows"></div>
+            <p id="split-count" class="hint"></p>
+            <p class="hint">Equal splits the amount across the people you check. Custom uses ratios: 1, 1, and 2 means the third person covers twice as much. The person who paid can be left out of the split.</p>
+            <div id="split-preview" class="receipt"></div>
+          </fieldset>
+
+          <div class="field">
+            <span class="label-row">Receipt photo <span class="jp" lang="ja">領収書</span></span>
+            <input id="receipt-input" class="sr-only" type="file" accept="image/*">
+            <label for="receipt-input" class="btn secondary">Add a photo from the camera or library</label>
+            <p id="receipt-status" class="hint"></p>
+            <div id="receipt-preview-wrap" class="photo-frame" hidden>
+              <button type="button" class="thumb-btn" data-action="open-draft-receipt" aria-label="View receipt preview" style="width:100%;height:auto">
+                <img id="receipt-preview" alt="Receipt preview" style="width:100%;height:auto;max-height:240px;object-fit:contain">
+              </button>
+            </div>
+            <button type="button" class="btn quiet" id="photo-remove" data-action="remove-receipt" hidden>Remove photo</button>
+            <p class="hint">Photos are compressed before they’re saved on this phone. After several receipts, storage can fill up.</p>
+          </div>
+
+          <div class="editor-actions">
+            <p id="form-error" class="form-error" role="alert" tabindex="-1" hidden></p>
+            <button type="submit" class="btn primary" id="save-expense">Save expense</button>
+          </div>
+        </form>
+      </section>
+
+      <section id="view-balances" hidden>
+        <header class="view-head">
+          <h2>Balances <span class="jp" lang="ja">収支</span></h2>
+          <p class="lede">Net is what someone paid minus their share of expenses they were part of.</p>
+        </header>
+        <div id="balance-root"></div>
+      </section>
+
+      <section id="view-settle" hidden>
+        <header class="view-head">
+          <h2>Settle <span class="jp" lang="ja">精算</span></h2>
+          <p class="lede">These payments are the shortest way to bring every net back to zero. Pay them in cash. A repayment is not a new expense.</p>
+        </header>
+        <div id="settle-root"></div>
+        <button type="button" class="btn secondary" id="copy-settlement" data-action="copy-settlement">Copy payment list</button>
+      </section>
+
+      <section id="view-settings" hidden>
+        <header class="view-head">
+          <h2>Settings <span class="jp" lang="ja">設定</span></h2>
+        </header>
+
+        <section class="panel">
+          <h3>Trip <span class="jp" lang="ja">旅</span></h3>
+          <label class="field">
+            <span class="label-row">Title</span>
+            <input id="trip-title-input" type="text" maxlength="60" autocomplete="off">
+          </label>
+          <label class="field">
+            <span class="label-row">Currency symbol</span>
+            <input id="currency-symbol" type="text" maxlength="4" autocomplete="off">
+          </label>
+          <label class="field">
+            <span class="label-row">Currency label</span>
+            <input id="currency-label-input" type="text" maxlength="12" autocomplete="off">
+          </label>
+          <label class="field">
+            <span class="label-row">Amounts</span>
+            <select id="decimals">
+              <option value="0">Whole amounts (yen)</option>
+              <option value="2">Two decimals (cents)</option>
+            </select>
+          </label>
+          <p id="money-example" class="hint"></p>
+        </section>
+
+        <section class="panel">
+          <h3>People <span class="jp" lang="ja">名前</span></h3>
+          <div id="people-fields"></div>
+          <p id="name-hint" class="hint name-hint" hidden></p>
+          <button type="button" class="btn quiet" data-action="reset-names">Restore original names</button>
+        </section>
+
+        <section class="panel">
+          <h3>Backup <span class="jp" lang="ja">書き出し</span></h3>
+          <div class="callout">
+            <strong>Phones do not sync <span class="jp" lang="ja">同期なし</span></strong>
+            Each phone keeps its own copy. There is no server. Export a JSON file and send it by AirDrop or WhatsApp. On the other phone, import that file. Import replaces that phone’s copy, so export a backup first if it has newer expenses.
+          </div>
+          <div class="stack">
+            <button type="button" class="btn primary" data-action="export">Export JSON</button>
+            <button type="button" class="btn secondary" id="share-export" data-action="share">Share file</button>
+            <label class="btn secondary">Import JSON
+              <input id="import-input" class="sr-only" type="file" accept="application/json,.json">
+            </label>
+          </div>
+        </section>
+
+        <section class="panel">
+          <h3>This phone <span class="jp" lang="ja">この端末</span></h3>
+          <div class="meter" aria-hidden="true"><span id="storage-fill"></span></div>
+          <p id="storage-label" class="hint"></p>
+          <button type="button" class="btn danger-quiet" data-action="erase">Delete all expenses</button>
+        </section>
+      </section>
+    </main>
+
+    <nav class="tabbar" id="tabbar" hidden aria-label="Sections">
+      <a class="tab" href="#/expenses" data-tab="expenses">
+        <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M7 3.5h7l5 5V20a1.5 1.5 0 0 1-1.5 1.5h-10.5A1.5 1.5 0 0 1 5.5 20V5A1.5 1.5 0 0 1 7 3.5z"/><path d="M14 3.5V9h5.5M8 13h8M8 16.5h5"/></svg>
+        Expenses
+        <span class="jp" lang="ja">支出</span>
+      </a>
+      <a class="tab" href="#/balances" data-tab="balances">
+        <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M5 6.5h14M5 12h14M5 17.5h9"/><circle cx="17.5" cy="17.5" r="2"/></svg>
+        Balances
+        <span class="jp" lang="ja">収支</span>
+      </a>
+      <a class="tab" href="#/settle" data-tab="settle">
+        <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 12h12M12 7l5 5-5 5"/><circle cx="6" cy="12" r="1.4" fill="currentColor" stroke="none"/></svg>
+        Settle
+        <span class="jp" lang="ja">精算</span>
+      </a>
+      <a class="tab" href="#/settings" data-tab="settings">
+        <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 8h10M18 8h2M4 16h2M10 16h10"/><circle cx="16" cy="8" r="2.2"/><circle cx="8" cy="16" r="2.2"/></svg>
+        Settings
+        <span class="jp" lang="ja">設定</span>
+      </a>
+    </nav>
+  </div>
+
+  <div id="dialog" class="modal" hidden>
+    <div class="modal-card" role="alertdialog" aria-modal="true" aria-labelledby="dialog-title" aria-describedby="dialog-body">
+      <h2 id="dialog-title"></h2>
+      <p id="dialog-body"></p>
+      <div class="modal-actions">
+        <button type="button" class="btn ghost" id="dialog-cancel">Cancel</button>
+        <button type="button" class="btn danger" id="dialog-ok">OK</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="lightbox" class="lightbox" hidden>
+    <button type="button" class="lightbox-close" id="lightbox-close" data-action="close-lightbox">Close</button>
+    <figure>
+      <img id="lightbox-img" alt="">
+      <figcaption id="lightbox-cap"></figcaption>
+    </figure>
+  </div>
+
+  <div id="toast" class="toast" hidden role="status"></div>
+
+  <script src="split.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
