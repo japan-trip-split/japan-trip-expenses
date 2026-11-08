@@ -54,6 +54,7 @@
 
       <section id="view-expenses" hidden>
         <a class="btn primary" href="#/new"><span>Add expense</span><span class="jp" lang="ja">支出を追加</span></a>
+        <div id="live-balance" class="live-balance" aria-live="polite"></div>
         <p id="expense-summary" class="summary"></p>
         <div id="expense-list"></div>
         <p class="sync-note">Each phone keeps its own copy. Nothing syncs until someone exports a file in Settings and someone else imports it.</p>
@@ -75,6 +76,14 @@
             <span class="label-row">Description <span class="jp" lang="ja">内容</span></span>
             <input id="field-description" type="text" maxlength="200" autocomplete="off" autocapitalize="sentences" placeholder="Ramen in Dotonbori" required>
           </label>
+
+          <fieldset class="field">
+            <legend class="label-row">Currency <span class="jp" lang="ja">通貨</span></legend>
+            <div class="chips" id="currency-chips">
+              <label class="chip"><input type="radio" name="currency" value="JPY" checked><span class="stack">JPY ¥ <span class="jp" lang="ja">円</span></span></label>
+              <label class="chip"><input type="radio" name="currency" value="HKD"><span class="stack">HKD HK$ <span class="jp" lang="ja">港幣</span></span></label>
+            </div>
+          </fieldset>
 
           <label class="field">
             <span class="label-row">Amount <span class="jp" lang="ja">金額</span></span>
@@ -108,7 +117,8 @@
           </fieldset>
 
           <fieldset class="field">
-            <legend class="label-row">Who shares it <span class="jp" lang="ja">割り勘</span></legend>
+            <legend class="label-row">Who should pay for this <span class="jp" lang="ja">誰が割るか</span></legend>
+            <p class="hint">Only the people you tick split this bill. Untick anyone who shouldn’t pay.</p>
             <div class="chips" style="margin-bottom: 8px">
               <label class="chip"><input type="radio" name="split-mode" value="equal" checked><span class="stack">Equal <span class="jp" lang="ja">均等</span></span></label>
               <label class="chip"><input type="radio" name="split-mode" value="custom"><span class="stack">Custom ratios <span class="jp" lang="ja">割合</span></span></label>
@@ -119,7 +129,7 @@
             </div>
             <div id="person-rows"></div>
             <p id="split-count" class="hint"></p>
-            <p class="hint">Equal splits the amount across the people you check. Custom uses ratios: 1, 1, and 2 means the third person covers twice as much. The person who paid can be left out of the split.</p>
+            <p class="hint">Equal splits the amount across the people you check. Custom uses ratios: 1, 1, and 2 means the third person covers twice as much. The person who paid can be left unticked so they don’t share the bill.</p>
             <div id="split-preview" class="receipt"></div>
           </fieldset>
 
@@ -172,21 +182,14 @@
             <span class="label-row">Title</span>
             <input id="trip-title-input" type="text" maxlength="60" autocomplete="off">
           </label>
-          <label class="field">
-            <span class="label-row">Currency symbol</span>
-            <input id="currency-symbol" type="text" maxlength="4" autocomplete="off">
-          </label>
-          <label class="field">
-            <span class="label-row">Currency label</span>
-            <input id="currency-label-input" type="text" maxlength="12" autocomplete="off">
-          </label>
-          <label class="field">
-            <span class="label-row">Amounts</span>
-            <select id="decimals">
-              <option value="0">Whole amounts (yen)</option>
-              <option value="2">Two decimals (cents)</option>
-            </select>
-          </label>
+          <fieldset class="field">
+            <legend class="label-row">Default currency for new expenses <span class="jp" lang="ja">新規の通貨</span></legend>
+            <p class="hint">Each expense can still be JPY or HKD. This only sets the default on the Add form. Existing expenses stay as they are.</p>
+            <div class="chips" id="default-currency-chips">
+              <label class="chip"><input type="radio" name="default-currency" value="JPY"><span class="stack">JPY ¥ <span class="jp" lang="ja">円</span></span></label>
+              <label class="chip"><input type="radio" name="default-currency" value="HKD"><span class="stack">HKD HK$ <span class="jp" lang="ja">港幣</span></span></label>
+            </div>
+          </fieldset>
           <p id="money-example" class="hint"></p>
         </section>
 

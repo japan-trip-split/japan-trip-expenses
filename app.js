@@ -90,6 +90,59 @@ function money(amount) {
   return TripSplit.formatMoney(amount, doc.settings);
 }
 
+function expenseCurrency(expense) {
+  return TripSplit.normalizeCurrencyCode(expense && expense.currency);
+}
+
+function defaultCurrency() {
+  return TripSplit.defaultCurrencyFromSettings(doc.settings);
+}
+
+function moneyIn(amount, currency) {
+  return TripSplit.formatMoney(amount, TripSplit.currencyMeta(currency));
+}
+
+function selectedFormCurrency() {
+  const input = document.querySelector('input[name="currency"]:checked');
+  return TripSplit.normalizeCurrencyCode(input ? input.value : defaultCurrency());
+}
+
+function applyCurrencyUi(currency) {
+  const meta = TripSplit.currencyMeta(currency);
+  const symbol = document.getElementById("amount-symbol");
+  const amount = document.getElementById("field-amount");
+  const hint = document.getElementById("amount-hint");
+  if (symbol) symbol.textContent = meta.symbol;
+  if (amount) amount.setAttribute("inputmode", meta.decimals === 2 ? "decimal" : "numeric");
+  if (hint) hint.textContent = meta.decimals === 2 ? "Up to two decimal places." : "Whole numbers.";
+  document.querySelectorAll('input[name="currency"]').forEach((input) => {
+    input.checked = input.value === meta.code;
+  });
+}
+
+function netLabel(net, currency) {
+  if (net > 0) return "Owed " + moneyIn(net, currency);
+  if (net < 0) return "Owes " + moneyIn(-net, currency);
+  return "Settled";
+}
+
+function netClass(net) {
+  if (net > 0) return "owed";
+  if (net < 0) return "owes";
+  return "even";
+}
+
+function currencyTotalsText() {
+  const parts = [];
+  ["JPY", "HKD"].forEach((code) => {
+    const list = TripSplit.expensesForCurrency(doc.expenses, code);
+    if (!list.length) return;
+    const total = list.reduce((sum, item) => sum + item.amount, 0);
+    parts.push(moneyIn(total, code));
+  });
+  return parts;
+}
+
 function personName(id) {
   const person = doc.people.find((item) => item.id === id);
   return person ? person.name : "Someone";
@@ -217,11 +270,13 @@ function updateChrome() {
   const title = (doc.settings.tripTitle || "").trim() || "Japan Trip";
   document.getElementById("trip-title").textContent = title;
   document.title = title + " · Expenses";
-  document.getElementById("currency-label").textContent = (doc.settings.currencyLabel || "").trim() || "JPY";
+  document.getElementById("currency-label").textContent = "JPY · HKD";
   const person = doc.people.find((item) => item.id === currentUserId);
   document.getElementById("who-label").textContent = person ? person.name : "Choose";
-  const symbol = document.getElementById("amount-symbol");
-  if (symbol) symbol.textContent = doc.settings.currencySymbol || "¥";
+  const editor = document.getElementById("view-editor");
+  if (editor && !editor.hidden) {
+    applyCurrencyUi(selectedFormCurrency());
+  }
   const theme = document.querySelector('meta[name="theme-color"]');
   if (theme) {
     const dark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
@@ -340,11 +395,68 @@ function splitSummary(expense) {
   return count + " people";
 }
 
+function renderLiveBalance() {
+  const root = document.getElementById("live-balance");
+  if (!root) return;
+  root.replaceChildren();
+  const jpyList = TripSplit.expensesForCurrency(doc.expenses, "JPY");
+  const hkdList = TripSplit.expensesForCurrency(doc.expenses, "HKD");
+  const showJpy = jpyList.length > 0;
+  const showHkd = hkdList.length > 0;
+  root.append(
+    el(
+      "div",
+      { class: "live-balance-head" },
+      el("h3", {}, "Live balance ", el("span", { class: "jp", lang: "ja", text: "いまの収支" }))
+    )
+  );
+  if (!showJpy && !showHkd) {
+    root.append(el("p", { class: "live-balance-note", text: "No expenses yet — everyone is square in JPY and HKD." }));
+    doc.people.forEach((person) => {
+      root.append(
+        el(
+          "div",
+          { class: "ledger-row" + (person.id === currentUserId ? " is-you" : "") },
+          el("div", { class: "person-name" }, person.name, person.id === currentUserId ? el("span", { class: "you-tag", text: "You" }) : null),
+          el("div", { class: "net-stack" }, el("div", { class: "net money even", text: "Settled" }))
+        )
+      );
+    });
+    return;
+  }
+  const jpyBalances = showJpy ? TripSplit.computeBalances(doc.people, jpyList) : null;
+  const hkdBalances = showHkd ? TripSplit.computeBalances(doc.people, hkdList) : null;
+  const noteBits = [];
+  if (showJpy) noteBits.push("JPY");
+  if (showHkd) noteBits.push("HKD");
+  root.append(el("p", { class: "live-balance-note", text: "Updated as you add or edit · " + noteBits.join(" + ") }));
+  doc.people.forEach((person, index) => {
+    const nets = [];
+    if (showJpy) {
+      const row = jpyBalances[index];
+      nets.push(el("div", { class: "net money " + netClass(row.net), text: netLabel(row.net, "JPY") }));
+    }
+    if (showHkd) {
+      const row = hkdBalances[index];
+      nets.push(el("div", { class: "net money " + netClass(row.net), text: netLabel(row.net, "HKD") }));
+    }
+    root.append(
+      el(
+        "div",
+        { class: "ledger-row" + (person.id === currentUserId ? " is-you" : "") },
+        el("div", { class: "person-name" }, person.name, person.id === currentUserId ? el("span", { class: "you-tag", text: "You" }) : null),
+        el("div", { class: "net-stack" }, ...nets)
+      )
+    );
+  });
+}
+
 function renderExpenses() {
-  const total = doc.expenses.reduce((sum, item) => sum + item.amount, 0);
+  renderLiveBalance();
   const count = doc.expenses.length;
+  const totals = currencyTotalsText();
   document.getElementById("expense-summary").textContent = count
-    ? count + (count === 1 ? " expense · " : " expenses · ") + money(total)
+    ? count + (count === 1 ? " expense" : " expenses") + (totals.length ? " · " + totals.join(" · ") : "")
     : "No expenses yet";
   const list = document.getElementById("expense-list");
   list.replaceChildren();
@@ -387,7 +499,7 @@ function expenseRow(item) {
     "a",
     { class: "expense-main", href: "#/expense/" + encodeURIComponent(item.id) },
     el("span", { class: "desc", text: item.description }),
-    el("span", { class: "money", text: money(item.amount) }),
+    el("span", { class: "money" }, moneyIn(item.amount, expenseCurrency(item)), el("span", { class: "currency-tag", text: expenseCurrency(item) })),
     el("span", { class: "paid-by", text: "Paid by " + personName(item.payerId) }),
     el("span", { class: "meta", text: item.category + " " + meta.ja + " · " + splitSummary(item) })
   );
@@ -405,7 +517,8 @@ function renderDetail(id) {
   const meta = categoryMeta(item.category);
   root.append(el("p", { class: "lede", text: dateLabel(item.date) + " · " + item.category + " · " + meta.ja }));
   root.append(el("h2", { text: item.description }));
-  root.append(el("p", { class: "detail-amount money", text: money(item.amount) }));
+  const currency = expenseCurrency(item);
+  root.append(el("p", { class: "detail-amount money", text: moneyIn(item.amount, currency) + " · " + currency }));
   root.append(el("p", { text: "Paid by " + personName(item.payerId) + "." }));
   root.append(
     el(
@@ -434,7 +547,7 @@ function renderDetail(id) {
         "div",
         { class: "receipt-line" },
         el("span", { text: personName(share.id) + ratio }),
-        el("span", { class: "money", text: money(share.amount) })
+        el("span", { class: "money", text: moneyIn(share.amount, currency) })
       )
     );
   });
@@ -470,11 +583,11 @@ function renderEditor(id) {
   document.getElementById("editor-heading-text").textContent = expense ? "Edit expense" : "New expense";
   document.getElementById("editor-back").setAttribute("href", expense ? "#/expense/" + encodeURIComponent(expense.id) : "#/expenses");
   document.getElementById("field-description").value = expense ? expense.description : "";
-  document.getElementById("field-amount").value = expense ? TripSplit.minorToInput(expense.amount, doc.settings.decimals) : "";
-  document.getElementById("field-amount").setAttribute("inputmode", doc.settings.decimals === 2 ? "decimal" : "numeric");
+  const currency = expense ? expenseCurrency(expense) : defaultCurrency();
+  const meta = TripSplit.currencyMeta(currency);
+  document.getElementById("field-amount").value = expense ? TripSplit.minorToInput(expense.amount, meta.decimals) : "";
   document.getElementById("field-date").value = expense ? expense.date : todayISO();
-  document.getElementById("amount-symbol").textContent = doc.settings.currencySymbol || "¥";
-  document.getElementById("amount-hint").textContent = doc.settings.decimals === 2 ? "Up to two decimal places." : "Whole numbers.";
+  applyCurrencyUi(currency);
   document.querySelectorAll('input[name="category"]').forEach((input) => {
     input.checked = input.value === (expense ? expense.category : "Food");
   });
@@ -539,7 +652,9 @@ function renderPeoplePickers(expense) {
 }
 
 function readDraft() {
-  const parsed = TripSplit.parseMoney(document.getElementById("field-amount").value, doc.settings.decimals);
+  const currency = selectedFormCurrency();
+  const meta = TripSplit.currencyMeta(currency);
+  const parsed = TripSplit.parseMoney(document.getElementById("field-amount").value, meta.decimals);
   const categoryInput = document.querySelector('input[name="category"]:checked');
   const payerInput = document.querySelector('input[name="payer"]:checked');
   const splitInput = document.querySelector('input[name="split-mode"]:checked');
@@ -555,6 +670,7 @@ function readDraft() {
     id: draftId,
     description: document.getElementById("field-description").value,
     amount: parsed.ok ? parsed.amount : 0,
+    currency: currency,
     validParse: parsed.ok,
     amountError: parsed.ok ? null : parsed.error,
     category: categoryInput ? categoryInput.value : "",
@@ -585,6 +701,7 @@ function cleanDraft(draft) {
       id: draft.id,
       description: draft.description.trim(),
       amount: draft.amount,
+      currency: TripSplit.normalizeCurrencyCode(draft.currency),
       category: draft.category,
       date: draft.date,
       payerId: draft.payerId,
@@ -641,12 +758,13 @@ function updatePreview() {
     box.append(el("p", { class: "preview-empty", text: "Check the ratios." }));
     return;
   }
+  const currency = draft.currency || selectedFormCurrency();
   box.append(
     el(
       "div",
       { class: "receipt-head" },
       el("h3", {}, "Shares ", el("span", { class: "jp", lang: "ja", text: "割り勘" })),
-      el("strong", { class: "money", text: money(draft.amount) })
+      el("strong", { class: "money", text: moneyIn(draft.amount, currency) })
     )
   );
   shares.forEach((share) => {
@@ -657,7 +775,7 @@ function updatePreview() {
         "div",
         { class: "receipt-line" },
         el("span", { text: personName(share.id) + ratio }),
-        el("span", { class: "money", text: money(share.amount) })
+        el("span", { class: "money", text: moneyIn(share.amount, currency) })
       )
     );
   });
@@ -913,59 +1031,102 @@ function closeDialog(value) {
   if (lastFocus && typeof lastFocus.focus === "function") lastFocus.focus();
 }
 
-function renderBalances() {
-  const root = document.getElementById("balance-root");
-  const balances = TripSplit.computeBalances(doc.people, doc.expenses);
-  const total = doc.expenses.reduce((sum, item) => sum + item.amount, 0);
+function appendCurrencyBalanceSection(root, code, expenses) {
+  const balances = TripSplit.computeBalances(doc.people, expenses);
+  const total = expenses.reduce((sum, item) => sum + item.amount, 0);
   const netSum = balances.reduce((sum, row) => sum + row.net, 0);
-  root.replaceChildren();
+  const meta = TripSplit.currencyMeta(code);
   root.append(
     el(
-      "div",
-      { class: "hero" },
-      el("p", { class: "kicker", text: "Total spent · 合計" }),
-      el("p", { class: "total money", text: money(total) }),
-      el("p", { class: "sub", text: doc.expenses.length + (doc.expenses.length === 1 ? " expense" : " expenses") })
+      "section",
+      { class: "currency-section" },
+      el("h3", { class: "currency-section-title", text: meta.label + " " + meta.symbol }),
+      el(
+        "div",
+        { class: "hero" },
+        el("p", { class: "kicker", text: "Total spent · 合計" }),
+        el("p", { class: "total money", text: moneyIn(total, code) }),
+        el("p", { class: "sub", text: expenses.length + (expenses.length === 1 ? " expense" : " expenses") })
+      )
     )
   );
+  const section = root.lastChild;
   balances.forEach((row) => {
-    let netClass = "even";
-    let netText = "Settled";
-    if (row.net > 0) {
-      netClass = "owed";
-      netText = "Owed " + money(row.net);
-    } else if (row.net < 0) {
-      netClass = "owes";
-      netText = "Owes " + money(-row.net);
-    }
-    root.append(
+    section.append(
       el(
         "div",
         { class: "ledger-row" + (row.id === currentUserId ? " is-you" : "") },
         el("div", { class: "person-name" }, row.name, row.id === currentUserId ? el("span", { class: "you-tag", text: "You" }) : null),
-        el("div", { class: "net money " + netClass, text: netText }),
-        el("div", { class: "fine", text: "Paid " + money(row.paid) + " · share " + money(row.share) })
+        el("div", { class: "net money " + netClass(row.net), text: netLabel(row.net, code) }),
+        el("div", { class: "fine", text: "Paid " + moneyIn(row.paid, code) + " · share " + moneyIn(row.share, code) })
       )
     );
   });
   if (netSum !== 0) {
-    root.append(el("p", { class: "books-warn", text: "The books are off by " + money(netSum) + ". Export a backup, then check the latest expenses." }));
+    section.append(el("p", { class: "books-warn", text: "The " + code + " books are off by " + moneyIn(netSum, code) + ". Export a backup, then check the latest expenses." }));
   }
 }
 
-function settlementLines() {
-  const balances = TripSplit.computeBalances(doc.people, doc.expenses);
-  const payments = TripSplit.settle(balances);
-  const lines = [((doc.settings.tripTitle || "Trip").trim() || "Trip") + " — settlement", ""];
-  if (!doc.expenses.length) lines.push("No expenses yet.");
-  else if (!payments.length) lines.push("Everyone is square. Nobody owes anything.");
-  else {
-    payments.forEach((payment) => {
-      lines.push(payment.fromName + " pays " + payment.toName + " " + money(payment.amount));
-    });
+function renderBalances() {
+  const root = document.getElementById("balance-root");
+  root.replaceChildren();
+  const jpyList = TripSplit.expensesForCurrency(doc.expenses, "JPY");
+  const hkdList = TripSplit.expensesForCurrency(doc.expenses, "HKD");
+  if (!jpyList.length && !hkdList.length) {
+    root.append(
+      el(
+        "div",
+        { class: "empty" },
+        el("h3", { text: "Everyone is square" }),
+        el("p", { text: "No expenses yet in JPY or HKD." })
+      )
+    );
+    return;
   }
-  lines.push("", "Log only what the group spent. A repayment is settled in cash; it is not a new expense.");
-  return { payments: payments, balances: balances, text: lines.join("\n") };
+  if (jpyList.length) appendCurrencyBalanceSection(root, "JPY", jpyList);
+  if (hkdList.length) appendCurrencyBalanceSection(root, "HKD", hkdList);
+}
+
+function settlementByCurrency() {
+  const groups = [];
+  ["JPY", "HKD"].forEach((code) => {
+    const expenses = TripSplit.expensesForCurrency(doc.expenses, code);
+    if (!expenses.length) return;
+    const balances = TripSplit.computeBalances(doc.people, expenses);
+    const payments = TripSplit.settle(balances).map((payment) => Object.assign({}, payment, { currency: code }));
+    groups.push({ code: code, expenses: expenses, balances: balances, payments: payments });
+  });
+  return groups;
+}
+
+function settlementLines() {
+  const groups = settlementByCurrency();
+  const lines = [((doc.settings.tripTitle || "Trip").trim() || "Trip") + " — settlement", ""];
+  if (!doc.expenses.length) {
+    lines.push("No expenses yet.");
+  } else if (!groups.length) {
+    lines.push("Everyone is square. Nobody owes anything.");
+  } else {
+    let anyPayment = false;
+    groups.forEach((group) => {
+      lines.push(group.code);
+      if (!group.payments.length) {
+        lines.push("Everyone is square in " + group.code + ".");
+      } else {
+        anyPayment = true;
+        group.payments.forEach((payment) => {
+          lines.push(payment.fromName + " pays " + payment.toName + " " + moneyIn(payment.amount, group.code));
+        });
+      }
+      lines.push("");
+    });
+    if (!anyPayment) {
+      /* already noted per currency */
+    }
+  }
+  lines.push("Log only what the group spent. A repayment is settled in cash; it is not a new expense.");
+  const payments = groups.flatMap((group) => group.payments);
+  return { payments: payments, groups: groups, text: lines.join("\n") };
 }
 
 function renderSettle() {
@@ -977,34 +1138,38 @@ function renderSettle() {
     return;
   }
   if (!result.payments.length) {
-    root.append(el("div", { class: "empty" }, el("h3", { text: "Everyone is square" }), el("p", { text: "Nobody owes anything." })));
+    root.append(el("div", { class: "empty" }, el("h3", { text: "Everyone is square" }), el("p", { text: "Nobody owes anything in JPY or HKD." })));
     return;
   }
   root.append(
     el("p", {
       class: "settle-count",
-      text: result.payments.length + (result.payments.length === 1 ? " payment squares the trip." : " payments square the trip."),
+      text: result.payments.length + (result.payments.length === 1 ? " payment squares the trip." : " payments square the trip.") + " JPY and HKD settle separately.",
     })
   );
-  result.payments.forEach((payment) => {
-    const involvesYou = payment.fromId === currentUserId || payment.toId === currentUserId;
-    const youNote = payment.fromId === currentUserId ? "You pay this." : payment.toId === currentUserId ? "This comes to you." : "";
-    root.append(
-      el(
-        "article",
-        { class: "pay-slip" + (payment.toId === currentUserId ? " is-in" : "") },
+  result.groups.forEach((group) => {
+    if (!group.payments.length) return;
+    root.append(el("h3", { class: "currency-section-title", text: group.code + " " + TripSplit.currencyMeta(group.code).symbol }));
+    group.payments.forEach((payment) => {
+      const involvesYou = payment.fromId === currentUserId || payment.toId === currentUserId;
+      const youNote = payment.fromId === currentUserId ? "You pay this." : payment.toId === currentUserId ? "This comes to you." : "";
+      root.append(
         el(
-          "div",
-          { class: "pay-line" },
-          el("strong", { text: payment.fromName }),
-          el("span", { class: "arrow", text: "→" }),
-          el("strong", { text: payment.toName })
-        ),
-        el("p", { class: "pay-amount money", text: money(payment.amount) }),
-        youNote ? el("p", { class: "pay-you", text: youNote }) : null,
-        involvesYou ? null : null
-      )
-    );
+          "article",
+          { class: "pay-slip" + (payment.toId === currentUserId ? " is-in" : "") },
+          el(
+            "div",
+            { class: "pay-line" },
+            el("strong", { text: payment.fromName }),
+            el("span", { class: "arrow", text: "→" }),
+            el("strong", { text: payment.toName })
+          ),
+          el("p", { class: "pay-amount money", text: moneyIn(payment.amount, group.code) }),
+          youNote ? el("p", { class: "pay-you", text: youNote }) : null,
+          involvesYou ? null : null
+        )
+      );
+    });
   });
 }
 
@@ -1145,9 +1310,12 @@ async function onImportFile(file) {
 }
 
 function renderExample() {
-  const sample = doc.settings.decimals === 2 ? 120000 : 1200;
   const node = document.getElementById("money-example");
-  if (node) node.textContent = "Example: " + TripSplit.formatMoney(sample, doc.settings);
+  if (!node) return;
+  const code = defaultCurrency();
+  const meta = TripSplit.currencyMeta(code);
+  const sample = meta.decimals === 2 ? 120000 : 1200;
+  node.textContent = "New expenses default to " + meta.label + " · example " + moneyIn(sample, code) + ". Each bill can still be switched to JPY or HKD.";
 }
 
 function renderStorage() {
@@ -1171,9 +1339,10 @@ function updateNameHint() {
 
 function renderSettings() {
   document.getElementById("trip-title-input").value = doc.settings.tripTitle;
-  document.getElementById("currency-symbol").value = doc.settings.currencySymbol;
-  document.getElementById("currency-label-input").value = doc.settings.currencyLabel;
-  document.getElementById("decimals").value = String(doc.settings.decimals);
+  const code = defaultCurrency();
+  document.querySelectorAll('input[name="default-currency"]').forEach((input) => {
+    input.checked = input.value === code;
+  });
   const box = document.getElementById("people-fields");
   box.replaceChildren();
   doc.people.forEach((person, index) => {
@@ -1199,49 +1368,23 @@ function renderSettings() {
   document.getElementById("share-export").hidden = typeof navigator.share !== "function";
 }
 
-async function onDecimalsChange(select) {
-  const next = Number(select.value);
-  const prev = doc.settings.decimals;
-  if (next === prev) return;
-  if (next !== 0 && next !== 2) {
-    select.value = String(prev);
-    return;
-  }
-  let removed = 0;
-  if (next === 0 && doc.expenses.some((item) => item.amount % 100 !== 0)) {
-    const ok = await confirmDialog({
-      title: "Round to whole amounts?",
-      body: "Some expenses use decimals. They’ll be rounded to the nearest whole unit. Anything that rounds to zero is removed.",
-      confirmLabel: "Round amounts",
-      danger: true,
-    });
-    if (!ok) {
-      select.value = String(prev);
-      return;
-    }
-  }
+function applyDefaultCurrency(code) {
+  const meta = TripSplit.currencyMeta(code);
   const success = commit((state) => {
-    if (prev === 0 && next === 2) {
-      state.expenses.forEach((item) => {
-        item.amount *= 100;
-      });
-    } else if (prev === 2 && next === 0) {
-      const kept = [];
-      state.expenses.forEach((item) => {
-        item.amount = Math.round(item.amount / 100);
-        if (item.amount > 0) kept.push(item);
-        else removed += 1;
-      });
-      state.expenses = kept;
-    }
-    state.settings.decimals = next;
+    state.settings.defaultCurrency = meta.code;
+    state.settings.currencySymbol = meta.symbol;
+    state.settings.currencyLabel = meta.label;
+    state.settings.decimals = meta.decimals;
   });
   if (!success) {
-    select.value = String(doc.settings.decimals);
+    document.querySelectorAll('input[name="default-currency"]').forEach((input) => {
+      input.checked = input.value === defaultCurrency();
+    });
     return;
   }
   renderExample();
-  toast(removed ? "Amounts rounded. Removed " + removed + " that became zero." : "Currency format updated.");
+  updateChrome();
+  toast("New expenses will default to " + meta.label + ". Existing bills keep their own currency.");
 }
 
 async function eraseExpenses() {
@@ -1330,15 +1473,6 @@ function bind() {
       doc.settings.tripTitle = target.value.slice(0, 60);
       updateChrome();
       scheduleSave();
-    } else if (target.id === "currency-symbol") {
-      doc.settings.currencySymbol = target.value.slice(0, 4);
-      updateChrome();
-      renderExample();
-      scheduleSave();
-    } else if (target.id === "currency-label-input") {
-      doc.settings.currencyLabel = target.value.slice(0, 12);
-      updateChrome();
-      scheduleSave();
     } else if (target.dataset.personId && target.closest("#people-fields")) {
       const person = doc.people.find((item) => item.id === target.dataset.personId);
       if (person) person.name = target.value.slice(0, 40);
@@ -1352,8 +1486,12 @@ function bind() {
 
   document.addEventListener("change", (event) => {
     const target = event.target;
-    if (target.id === "decimals") onDecimalsChange(target);
-    else if (target.id === "receipt-input") onReceiptChosen(target.files && target.files[0]);
+    if (target.name === "default-currency") {
+      applyDefaultCurrency(target.value);
+    } else if (target.name === "currency" && target.closest("#expense-form")) {
+      applyCurrencyUi(selectedFormCurrency());
+      updatePreview();
+    } else if (target.id === "receipt-input") onReceiptChosen(target.files && target.files[0]);
     else if (target.id === "import-input") onImportFile(target.files && target.files[0]);
     else if (target.closest("#expense-form")) updatePreview();
   });
@@ -1364,19 +1502,6 @@ function bind() {
       const value = target.value.trim().slice(0, 60) || "Japan Trip";
       target.value = value;
       doc.settings.tripTitle = value;
-      updateChrome();
-      flushSave();
-    } else if (target.id === "currency-symbol") {
-      const value = target.value.trim().slice(0, 4) || "¥";
-      target.value = value;
-      doc.settings.currencySymbol = value;
-      updateChrome();
-      renderExample();
-      flushSave();
-    } else if (target.id === "currency-label-input") {
-      const value = target.value.trim().slice(0, 12) || "JPY";
-      target.value = value;
-      doc.settings.currencyLabel = value;
       updateChrome();
       flushSave();
     } else if (target.dataset.personId && target.closest("#people-fields")) {

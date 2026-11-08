@@ -1,6 +1,6 @@
 /* Shared trip math and the { people, expenses, settings } document.
-   Amounts are integers in minor units: yen when settings.decimals is 0,
-   hundredths of the unit when settings.decimals is 2. */
+   Amounts are integers in minor units: whole yen for JPY (decimals 0),
+   cents for HKD (decimals 2). Each expense carries its own currency. */
 (function (root, factory) {
   const api = factory();
   if (typeof module === "object" && module.exports) module.exports = api;
@@ -26,7 +26,39 @@
     { id: "pearl", name: "Pearl" },
   ];
 
+  const CURRENCIES = {
+    JPY: { code: "JPY", symbol: "¥", label: "JPY", decimals: 0 },
+    HKD: { code: "HKD", symbol: "HK$", label: "HKD", decimals: 2 },
+  };
+
   const STORAGE_LIMIT_BYTES = 5 * 1024 * 1024;
+
+  function currencyMeta(code) {
+    return CURRENCIES[code === "HKD" ? "HKD" : "JPY"];
+  }
+
+  function normalizeCurrencyCode(value) {
+    return value === "HKD" ? "HKD" : "JPY";
+  }
+
+  function defaultCurrencyFromSettings(settings) {
+    if (!settings || typeof settings !== "object") return "JPY";
+    if (settings.defaultCurrency === "HKD" || settings.defaultCurrency === "JPY") {
+      return settings.defaultCurrency;
+    }
+    if (settings.currencyLabel === "HKD") return "HKD";
+    return "JPY";
+  }
+
+  function settingsForCurrency(code) {
+    const meta = currencyMeta(code);
+    return {
+      currencySymbol: meta.symbol,
+      currencyLabel: meta.label,
+      decimals: meta.decimals,
+      defaultCurrency: meta.code,
+    };
+  }
 
   function createDocument(now) {
     const stamp = now || new Date().toISOString();
@@ -39,6 +71,7 @@
         currencySymbol: "¥",
         currencyLabel: "JPY",
         decimals: 0,
+        defaultCurrency: "JPY",
         updatedAt: stamp,
       },
     };
@@ -83,9 +116,22 @@
     return { ok: true, amount };
   }
 
-  function formatMoney(amount, settings) {
-    const symbol = (settings && settings.currencySymbol) || "";
-    const decimals = settings && settings.decimals === 2 ? 2 : 0;
+  function formatMoney(amount, settingsOrCurrency) {
+    let symbol = "";
+    let decimals = 0;
+    if (typeof settingsOrCurrency === "string") {
+      const meta = currencyMeta(settingsOrCurrency);
+      symbol = meta.symbol;
+      decimals = meta.decimals;
+    } else if (settingsOrCurrency && typeof settingsOrCurrency === "object") {
+      if (settingsOrCurrency.code === "JPY" || settingsOrCurrency.code === "HKD" || (settingsOrCurrency.symbol != null && settingsOrCurrency.currencySymbol == null)) {
+        symbol = settingsOrCurrency.symbol || "";
+        decimals = settingsOrCurrency.decimals === 2 ? 2 : 0;
+      } else {
+        symbol = settingsOrCurrency.currencySymbol || "";
+        decimals = settingsOrCurrency.decimals === 2 ? 2 : 0;
+      }
+    }
     const negative = amount < 0;
     const abs = Math.abs(Number(amount) || 0);
     let body;
@@ -178,6 +224,11 @@ function sharesForExpense(expense, people) {
         net: paidAmount - shareAmount,
       };
     });
+  }
+
+  function expensesForCurrency(expenses, code) {
+    const currency = normalizeCurrencyCode(code);
+    return (expenses || []).filter((expense) => normalizeCurrencyCode(expense && expense.currency) === currency);
   }
 
   function settle(balances) {
@@ -292,6 +343,7 @@ function sharesForExpense(expense, people) {
     if (typeof raw.id !== "string" || !/^[\w-]{1,80}$/.test(raw.id)) {
       return { ok: false, error: label + ": has an invalid id." };
     }
+    const currency = normalizeCurrencyCode(raw.currency);
     const now = new Date().toISOString();
     return {
       ok: true,
@@ -299,6 +351,7 @@ function sharesForExpense(expense, people) {
         id: raw.id,
         description,
         amount: raw.amount,
+        currency,
         category: raw.category,
         date: raw.date,
         payerId: raw.payerId,
@@ -349,6 +402,10 @@ function sharesForExpense(expense, people) {
     if (decimals === "0") decimals = 0;
     if (decimals === "2") decimals = 2;
     if (decimals !== 0 && decimals !== 2) return { ok: false, error: "Decimals must be 0 or 2." };
+    const defaultCurrency = defaultCurrencyFromSettings({
+      defaultCurrency: raw.defaultCurrency,
+      currencyLabel,
+    });
     const updatedAt = typeof raw.updatedAt === "string" && raw.updatedAt ? raw.updatedAt : new Date().toISOString();
     return {
       ok: true,
@@ -358,6 +415,7 @@ function sharesForExpense(expense, people) {
         currencySymbol,
         currencyLabel,
         decimals,
+        defaultCurrency,
         updatedAt,
       },
     };
@@ -435,8 +493,13 @@ function sharesForExpense(expense, people) {
   return {
     CATEGORIES,
     DEFAULT_PEOPLE,
+    CURRENCIES,
     STORAGE_LIMIT_BYTES,
     createDocument,
+    currencyMeta,
+    normalizeCurrencyCode,
+    defaultCurrencyFromSettings,
+    settingsForCurrency,
     normalizeNumericInput,
     parseMoney,
     formatMoney,
@@ -444,6 +507,7 @@ function sharesForExpense(expense, people) {
     allocate,
     sharesForExpense,
     computeBalances,
+    expensesForCurrency,
     settle,
     isValidDate,
     cleanReceipt,

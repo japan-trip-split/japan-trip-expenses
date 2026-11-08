@@ -661,3 +661,64 @@ body[data-view="editor"] .toast { bottom: calc(92px + env(safe-area-inset-bottom
   .shell { min-height: calc(100dvh - 36px); border-radius: 22px; overflow: clip; }
   .tabbar { border-radius: 0 0 22px 22px; }
 }
+
+.live-balance {
+  margin: 12px 0 4px;
+  padding: 12px 14px 8px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  box-shadow: var(--shadow);
+}
+.live-balance-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.live-balance-head h3 {
+  margin: 0;
+  font-family: var(--serif);
+  font-size: 1.15rem;
+  font-weight: 560;
+}
+.live-balance-head .jp { color: var(--muted); font-size: 0.86em; margin-left: 6px; }
+.live-balance-note { margin: 0 0 8px; color: var(--muted); font-size: 0.85rem; }
+.live-balance .ledger-row { padding: 10px 2px; }
+.live-balance .net-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  text-align: right;
+}
+.live-balance .net-stack .net { font-size: 0.98rem; }
+.currency-section {
+  margin: 14px 0 8px;
+  padding-top: 4px;
+}
+.currency-section-title {
+  margin: 0 0 6px;
+  font-family: var(--serif);
+  font-size: 1.05rem;
+  font-weight: 560;
+  letter-spacing: 0.02em;
+  color: var(--ai);
+}
+@media (prefers-color-scheme: dark) {
+  .currency-section-title { color: var(--accent); }
+}
+.currency-section .hero { padding-top: 4px; }
+.expense .currency-tag {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--indigo-soft);
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  vertical-align: middle;
+}
